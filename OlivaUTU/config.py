@@ -47,5 +47,6 @@ DEFAULT_CUSTOM_CONFIG = {
     'NEW_SUBMISSION_RECEIVE_PRIVATE': [],
     'NEW_SUBMISSION_RECEIVED': 'You have a new applicant!\n[{sbm_uuid}] from [{author}]:\nkeyword-[{keyword}]\nreply-[{reply}]\nmatch_type-[{match_type}]',
     'SUBMISSION_DELIVERED': 'Submission [{sbm_uuid}] has already submitted!',
-    'SUBMISSION_ADOPTED': 'Submission [{sbm_uuid}] has already adopted!'
+    'SUBMISSION_ADOPTED': 'Submission [{sbm_uuid}] has already adopted!',
+    'SUBMISSION_REJECTED': 'Submission [{sbm_uuid}] has already rejected!'
 }

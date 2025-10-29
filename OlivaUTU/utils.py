@@ -1,7 +1,25 @@
+import OlivOS
 from .config import DATA_PATH, CONF_PATH
 from .logger import logger
 import json
 import os
+
+OlivOS_DB = OlivOS.userModule.UserConfDB.DataBaseAPI
+
+class DB:
+    def __init__(self):
+        self.db: OlivOS_DB = None
+        self.namespace: str = None
+
+    def bind(self, database, namespace: str = 'OlivaUTU'):
+        self.db = database
+        self.namespace = namespace
+
+    def get_data(self, key: str, default_value: any = None, pkl: bool = True):
+        return self.db.get_basic_config(namespace=self.namespace, key=key, default_value=default_value, pkl=pkl)
+    
+    def set_data(self, key: str, value: any, pkl: bool = True):
+        return self.db.set_basic_config(namespace=self.namespace, key=key, value=value, pkl=pkl)
 
 def write_json(obj, path = '') -> None:
     try:

@@ -3,6 +3,7 @@ from .config import CREATE_CACHE_UNION, CREATE_CACHE_UNIT, CREATE_DATA_UNION, CR
 from .utils import conf_path, data_path, read_json, write_json, reply_format
 from .logger import logger
 from . import config
+from . import utils
 import hashlib
 import random
 import uuid
@@ -11,11 +12,13 @@ import re
 
 # AI regex /submit [关键词]-[回复词](-[匹配类型])
 RE_SUBMIT = re.compile(r'^\s*[./。](投稿|submit)\s+([^\s-](?:.*?[^\s-])?)-([^\s-](?:.*?[^\s-])?)(?:-([^\s-](?:.*?[^\s-])?))?\s*$', re.I)
-# Non-AI regex /pass [uuid]
+# Non-AI regex /pass [uuid], /no [uuid]
 RE_PASS = re.compile(r'^\s*[./。]pass\s*(\S+)\s*$', re.I)
-RE_NO = re.compile(r'^\s*[./。]no\s*(\S+)\s*$', re.I)
+RE_REJECT = re.compile(r'^\s*[./。]no\s*(\S+)\s*$', re.I)
+
 OlivOS_Event = OlivOS.API.Event
 OlivOS_Proc = OlivOS.pluginAPI.shallow
+OlivOS_DB = OlivOS.userModule.UserConfDB.DataBaseAPI
 
 # def event_filter():
 #     def decorator(func):
@@ -38,6 +41,9 @@ OlivOS_Proc = OlivOS.pluginAPI.shallow
 
 class Event(object):
     def init(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
+        global db
+        db = utils.DB()
+        db.bind(Proc.database)
         global global_conf
         global_conf = DEFAULT_CUSTOM_CONFIG
         global switch
@@ -98,6 +104,7 @@ def unity_reply(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
     msg = pevent.data.message
     re_msg1 = RE_SUBMIT.match(msg)
     re_msg2 = RE_PASS.match(msg)
+    re_msg3 = RE_REJECT.match(msg)
 
     # save submission, waiting for adopting
     if re_msg1 is not None:
@@ -117,14 +124,14 @@ def unity_reply(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
         tmp_cache_union['data'][sbm_uuid] = tmp_cache_unit
         write_json(tmp_cache_union, data_path('cache'))
 
-        reply_received = reply_format(global_conf['NEW_SUBMISSION_RECEIVED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
+        msg_received = reply_format(global_conf['NEW_SUBMISSION_RECEIVED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
         for group_id in global_conf.get('NEW_SUBMISSION_RECEIVE_GROUP'):
-            pevent.send(message=reply_received, send_type='group', target_id=group_id)
+            pevent.send(message=msg_received, send_type='group', target_id=group_id)
         for user_id in global_conf.get('NEW_SUBMISSION_RECEIVE_PRIVATE'):
-            pevent.send(message=reply_received, send_type='private', target_id=user_id)
+            pevent.send(message=msg_received, send_type='private', target_id=user_id)
 
-        reply_submitted = reply_format(global_conf['SUBMISSION_DELIVERED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
-        pevent.reply(reply_submitted)
+        msg_submitted = reply_format(global_conf['SUBMISSION_DELIVERED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
+        pevent.reply(msg_submitted)
 
     # adopt submission after verifying, waiting for triggering
     elif re_msg2 is not None:
@@ -142,9 +149,20 @@ def unity_reply(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
             write_json(tmp_data_union, data_path('custom'))
             write_json(tmp_cache_union, data_path('cache'))
 
-            reply_adopted = reply_format(global_conf['SUBMISSION_ADOPTED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
-            pevent.send(send_type='private', target_id=author, message=reply_adopted)
-            pevent.reply(reply_adopted)
+            msg_adopted = reply_format(global_conf['SUBMISSION_ADOPTED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
+            pevent.send(send_type='private', target_id=author, message=msg_adopted)
+            pevent.reply(msg_adopted)
+
+    #reject submission after verifying
+    elif re_msg3 is not None:
+        if int(pevent.data.user_id) in global_conf['ADMINISTRATOR']:
+            sbm_uuid = re_msg3.group(1).strip()
+            tmp_cache_union:dict = read_json(data_path('cache'))
+            author = tmp_cache_union.get('data').get(sbm_uuid).get(sbm_uuid)
+            tmp_cache_union['data'].pop(sbm_uuid)
+
+            msg_rejected = reply_format(global_conf['SUBMISSION_REJECTED'], sbm_uuid=sbm_uuid)
+            pevent.send(send_type='private', target_id=author, message=msg_rejected)
 
     # choose one to reply
     else:
