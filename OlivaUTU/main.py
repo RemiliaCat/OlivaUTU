@@ -1,21 +1,24 @@
 import OlivOS
-from .config import CREATE_CACHE_UNION, CREATE_CACHE_UNIT, CREATE_DATA_UNION, CREATE_DATA_UNIT, DEFAULT_CUSTOM_CONFIG
 from .utils import conf_path, data_path, read_json, write_json, reply_format
-from .logger import logger
+from .config import DEFAULT_CUSTOM_CONFIG
 from . import config
 from . import utils
+from . import data
 import hashlib
 import random
 import uuid
+import json
 import os
 import re
 
-# AI regex /submit [关键词]-[回复词](-[匹配类型])
-RE_SUBMIT = re.compile(r'^\s*[./。](投稿|submit)\s+([^\s-](?:.*?[^\s-])?)-([^\s-](?:.*?[^\s-])?)(?:-([^\s-](?:.*?[^\s-])?))?\s*$', re.I)
-# Non-AI regex /pass [uuid], /no [uuid]
-RE_PASS = re.compile(r'^\s*[./。]pass\s*(\S+)\s*$', re.I)
-RE_REJECT = re.compile(r'^\s*[./。]no\s*(\S+)\s*$', re.I)
+# AI regex 
+# /submit [关键词]-[回复词](-[匹配类型])
+RE_SUBMIT = re.compile(r'^[./。](?:投稿|submit|sbm)\s*(.+)$', re.I)
+# Non-AI regex 
+# /pass [uuid], /reject [uuid]
+RE_REVIEW = re.compile(r'^\s*[./。](pass|adopt|采纳|通过|no|reject|拒绝)\s*(.+)$', re.I)
 
+OlivOS_BotInfo = OlivOS.API.bot_info_T
 OlivOS_Event = OlivOS.API.Event
 OlivOS_Proc = OlivOS.pluginAPI.shallow
 OlivOS_DB = OlivOS.userModule.UserConfDB.DataBaseAPI
@@ -41,151 +44,258 @@ OlivOS_DB = OlivOS.userModule.UserConfDB.DataBaseAPI
 
 class Event(object):
     def init(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
+        pevent = plugin_event
         global db
-        db = utils.DB()
+        db = data.DB()
         db.bind(Proc.database)
         global global_conf
         global_conf = DEFAULT_CUSTOM_CONFIG
-        global switch
-        switch = True
         global logger
+        logger = utils.Logger()
         logger.bind(Proc)
-
-        if not os.path.exists(data_path()):
-            os.makedirs(config.DATA_PATH)
-        
-        if not os.path.exists(conf_path()):
-            os.makedirs(config.CONF_PATH)
-
-        if not os.path.exists(conf_path('config')):
-            write_json(config.DEFAULT_CUSTOM_CONFIG, conf_path('config'))
-        global_conf = read_json(conf_path('config'))
-        for k in config.DEFAULT_CUSTOM_CONFIG.keys():
-            if global_conf.get(k) is None:
-                global_conf[k] = config.DEFAULT_CUSTOM_CONFIG.get(k)
-
-        if not os.path.exists(data_path('custom')):
-            write_json(CREATE_DATA_UNION(), data_path('custom'))
-
-        if not os.path.exists(data_path('cache')):
-            write_json(CREATE_CACHE_UNION(), data_path('cache'))
+        unity_load()
 
     def init_after(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
         pass
 
     # @event_filter
     def group_message(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
-        global switch
-        if not switch:
-            return
-        unity_reply(plugin_event, Proc)
+        if db.get_data('switch', True, False):
+            unity_reply(plugin_event, Proc)
     
     # @event_filter
     def private_message(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
-        global switch
-        if not switch:
-            return
-        unity_reply(plugin_event, Proc)
+        if db.get_data('switch', True, False):
+            unity_reply(plugin_event, Proc)
 
     def save(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
         pass
 
     def menu(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
         if plugin_event.data.event == 'plugin_on':
-            logger.info('OlivaUTU high!')
+            logger.info('o(≧▽≦)o: OlivaUTU is running!')
             plugin_on()
         elif plugin_event.data.event == 'plugin_off':
-            logger.info('OlivaUTU sad!')
+            logger.info('/(>.<)/~~: OlivaUTU get sad!')
             plugin_off()
-
+        elif plugin_event.data.event == 'plugin_reload':
+            unity_load()
+            logger.info('owo: OlivaUTU turned around!')
 
 def unity_reply(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
     pevent = plugin_event
-    msg = pevent.data.message
-    re_msg1 = RE_SUBMIT.match(msg)
-    re_msg2 = RE_PASS.match(msg)
-    re_msg3 = RE_REJECT.match(msg)
+    msg_raw = pevent.data.message
+    msg = utils.strip_leading_bot_at(msg_raw, pevent.bot_info.id)
+    sbm_cmd = parse_submit_cmd(msg)
+    rev_cmd = parse_review_cmd(msg)
 
-    # save submission, waiting for adopting
-    if re_msg1 is not None:
-        author = pevent.data.user_id
-        keyword_raw = re_msg1.group(2)  # splitted by '|' if it's multiple word
-        keyword = keyword_raw.split('|')
-        keyword = [k for k in keyword if k] # ensure non-empty
-        reply_raw = re_msg1.group(3)    # same as above
-        reply = reply_raw.split('|')
-        reply = [r for r in reply if r] # same as above
-        match_type = re_msg1.group(4)
-        match_type = 'full' if match_type not in ['full', 'contain'] else match_type
-        sbm_uuid = str(uuid.uuid4()) # unique to identify submission
+    if sbm_cmd is not None:
+        # 通过 /sbm add [关键词]-[回复词]-[匹配模式] 提交投稿，其中`add`和匹配模式可省略
+        if sbm_cmd['action'] == 'add':
+            sbm_uuid = str(uuid.uuid4())
+            author = pevent.data.user_id
+            keyword = sbm_cmd['keyword']
+            reply = sbm_cmd['reply']
+            match_type = sbm_cmd['match_type']
 
-        tmp_cache_union = read_json(data_path('cache'))
-        tmp_cache_unit = CREATE_CACHE_UNIT(author, keyword, reply, match_type)
-        tmp_cache_union['data'][sbm_uuid] = tmp_cache_unit
-        write_json(tmp_cache_union, data_path('cache'))
-
-        msg_received = reply_format(global_conf['NEW_SUBMISSION_RECEIVED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
-        for group_id in global_conf.get('NEW_SUBMISSION_RECEIVE_GROUP'):
-            pevent.send(message=msg_received, send_type='group', target_id=group_id)
-        for user_id in global_conf.get('NEW_SUBMISSION_RECEIVE_PRIVATE'):
-            pevent.send(message=msg_received, send_type='private', target_id=user_id)
-
-        msg_submitted = reply_format(global_conf['SUBMISSION_DELIVERED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
-        pevent.reply(msg_submitted)
-
-    # adopt submission after verifying, waiting for triggering
-    elif re_msg2 is not None:
-        if int(pevent.data.user_id) in global_conf['ADMINISTRATORS']:
-            sbm_uuid = re_msg2.group(1).strip()
             tmp_cache_union = read_json(data_path('cache'))
-            tmp_cache_unit = tmp_cache_union.get('data').get(sbm_uuid)
-            tmp_data_union = read_json(data_path('custom'))
-            if tmp_cache_unit is None:
-                return
-            author = tmp_cache_unit['author']
-            key_hash = hashlib.md5(tmp_cache_unit['keyword'].encode()).hexdigest()
-            tmp_data_union['data'][key_hash] = get_data_from_cache_unit(tmp_cache_unit)
-            tmp_cache_union['data'].pop(sbm_uuid)
-            write_json(tmp_data_union, data_path('custom'))
+            tmp_cache_unit = data.create_cache_unit(author, keyword, reply, match_type)
+            tmp_cache_union['data'][sbm_uuid] = tmp_cache_unit
             write_json(tmp_cache_union, data_path('cache'))
 
-            msg_adopted = reply_format(global_conf['SUBMISSION_ADOPTED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
-            pevent.send(send_type='private', target_id=author, message=msg_adopted)
-            pevent.reply(msg_adopted)
+            msg_received = reply_format(global_conf['NEW_SUBMISSION_RECEIVED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
+            for group_id in global_conf.get('NEW_SUBMISSION_RECEIVE_GROUP'):
+                pevent.send(message=msg_received, send_type='group', target_id=group_id)
+            for user_id in global_conf.get('NEW_SUBMISSION_RECEIVE_PRIVATE'):
+                pevent.send(message=msg_received, send_type='private', target_id=user_id)
 
-    #reject submission after verifying
-    elif re_msg3 is not None:
-        if int(pevent.data.user_id) in global_conf['ADMINISTRATOR']:
-            sbm_uuid = re_msg3.group(1).strip()
-            tmp_cache_union:dict = read_json(data_path('cache'))
-            author = tmp_cache_union.get('data').get(sbm_uuid).get(sbm_uuid)
-            tmp_cache_union['data'].pop(sbm_uuid)
+            msg_submitted = reply_format(global_conf['SUBMISSION_DELIVERED'], sbm_uuid=sbm_uuid)
+            pevent.reply(msg_submitted)
 
-            msg_rejected = reply_format(global_conf['SUBMISSION_REJECTED'], sbm_uuid=sbm_uuid)
-            pevent.send(send_type='private', target_id=author, message=msg_rejected)
+        # 删除指定key_hash的data_unit，若只需删除特定回复请转到plugin/data/OlivaUTU/custom.json
+        elif sbm_cmd['action'] == 'del':
+            key_hash = sbm_cmd['key_hash']
+            
+            tmp_data_union = read_json(data_path('custom'))
+            tmp_data_union['data'].pop(key_hash)
+            write_json(tmp_data_union, data_path('custom'))
+            
+            msg_deleted = reply_format(global_conf['DATA_DELETED'],key_hash=key_hash)
+            pevent.reply(msg_deleted)
+            
+        # 暂时定为直接输出序列化文本
+        elif sbm_cmd['action'] == 'list':
+            tmp_res = read_json(conf_path('custom'))
+            res = json.dumps(tmp_res, indent=4, ensure_ascii=False)
+            return res
+        return
+    
+    if rev_cmd is not None:
+        if pevent.data.user_id in str(global_conf['ADMINISTRATORS']):
+            if rev_cmd['action'] == 'pass':
+                sbm_uuid = rev_cmd['uuid']
+                tmp_cache_union = read_json(data_path('cache'))
+                tmp_cache_unit = tmp_cache_union.get('data').get(sbm_uuid)
+                if tmp_cache_unit is None:
+                    msg_not_found = reply_format(global_conf['SUBMISSION_NOT_FOUND'], sbm_uuid=sbm_uuid)
+                    pevent.reply(msg_not_found)
+                    return
+                
+                author = tmp_cache_unit['author']
+                key_hash = hashlib.md5(tmp_cache_unit['keyword'].encode()).hexdigest()
+                tmp_data_union = read_json(data_path('custom'))
+                tmp_data_unit = tmp_data_union.get('data').get(key_hash)
+                tmp_data_union['data'][key_hash] = data.get_data_from_cache_unit(tmp_cache_unit, tmp_data_unit)
+                tmp_cache_union['data'].pop(sbm_uuid)
+                write_json(tmp_data_union, data_path('custom'))
+                write_json(tmp_cache_union, data_path('cache'))
 
-    # choose one to reply
-    else:
-        key_hash = hashlib.md5(msg.encode()).hexdigest()
-        tmp_data_union = read_json(data_path('custom'))
-        if tmp_data_union.get('data').get(key_hash) is None:
-            return
-        reply = random.choice(tmp_data_union['data'][key_hash]['reply'])
-        pevent.reply(reply)
+                msg_passed = reply_format(global_conf['SUBMISSION_PASSED'], sbm_uuid=sbm_uuid)
+                pevent.send(send_type='private', target_id=author, message=msg_passed)
+                pevent.reply(msg_passed)
+                
+            elif rev_cmd['action'] == 'reject':
+                sbm_uuid = rev_cmd['uuid']
+                tmp_cache_union = read_json(data_path('cache'))
+                author = tmp_cache_union.get('data').get(sbm_uuid).get('author')
+                tmp_cache_union['data'].pop(sbm_uuid)
+                write_json(tmp_cache_union, data_path('cache'))
+
+                msg_rejected = reply_format(global_conf['SUBMISSION_REJECTED'], sbm_uuid=sbm_uuid)
+                pevent.send(send_type='private', target_id=author, message=msg_rejected)
+                pevent.reply(msg_rejected)
+                pass
+        return
+    
+    # 通过`消息文本hash`匹配`关键词文本hash`
+    key_hash = hashlib.md5(msg.encode()).hexdigest()
+    tmp_data_union = read_json(data_path('custom'))
+    if tmp_data_union.get('data').get(key_hash) is None:
+        return
+    reply = random.choice(tmp_data_union['data'][key_hash]['reply'])
+    pevent.reply(reply)
+    pevent.set_block(True)
     return
 
+def unity_load():
+    global global_conf
+    if not os.path.exists(data_path()):
+        os.makedirs(config.DATA_PATH)
+    
+    if not os.path.exists(conf_path()):
+        os.makedirs(config.CONF_PATH)
+
+    if not os.path.exists(conf_path('config')):
+        write_json(config.DEFAULT_CUSTOM_CONFIG, conf_path('config'))
+    global_conf = read_json(conf_path('config'))
+    for k in config.DEFAULT_CUSTOM_CONFIG.keys():
+        if global_conf.get(k) is None:
+            global_conf[k] = config.DEFAULT_CUSTOM_CONFIG.get(k)
+    write_json(global_conf, conf_path('config'))
+
+    if not os.path.exists(data_path('custom')):
+        write_json(data.create_data_union(), data_path('custom'))
+
+    if not os.path.exists(data_path('cache')):
+        write_json(data.create_cache_union(), data_path('cache'))
+
 def plugin_on():
-    global switch
-    switch = True
+    db.set_data('switch', True, False)
 
 def plugin_off():
-    global switch
-    switch = False
+    db.set_data('switch', False, False)
 
-def get_data_from_cache_unit(cache_unit) -> dict:
-    tmp_data_unit = CREATE_DATA_UNIT()
-    tmp_data_unit['match_type'] = cache_unit.get('match_type')
-    tmp_data_unit['author'].append(cache_unit.get('author'))
-    tmp_data_unit['keyword'].extend(cache_unit.get('keyword'))
-    tmp_data_unit['reply'].extend(cache_unit.get('reply'))
-    return tmp_data_unit
+def plugin_reload():
+    unity_load()
+
+def parse_submit_cmd(msg: str) -> 'dict|None':
+    '''
+    解析: /submit add/del/list 命令
+    参数: msg 不多介绍
+    返回 dict | None:
+      {
+        "action": "add" | "list" | "del",
+        "keyword": ...,
+        "reply": list[str],
+        "match_type": "full" | "contain",
+        "key_hash": ...
+      }
+    如果不匹配会返回None
+    '''
+    m = RE_SUBMIT.match(msg.strip())
+    if not m:
+        return None
+    
+    body = m.group(1).strip()
+
+    if body.lower() == 'list':
+        return {'action': 'list'}
+    
+    if body.lower().startswith('del'):
+        key_hash = body[3:].strip()
+        if not key_hash:
+            return None
+        return {'action': 'del', 'key_hash': key_hash}
+    
+    # if body.lower().startswith('add'):
+    parts = []
+    buf = ''
+    depth = 0
+    for ch in reversed(body):
+        if ch == ']':
+            depth += 1
+        elif ch == '[':
+            depth -= 1
+        if ch == '-' and depth == 0 and len(parts) < 2:
+            parts.append(buf[::-1].strip())
+            buf = ''
+        else:
+            buf += ch
+    parts.append(buf[::-1].strip())
+    parts = list(reversed(parts))
+
+    if len(parts) < 2:
+        return None
+    keyword = parts[0]
+    reply_raw = parts[1]
+    reply = [r.strip() for r in reply_raw.split('|') if r.strip()]
+    match_type = None if len(parts) < 3 else parts[2]
+    if match_type not in ['full', 'contain']:
+        match_type = 'full'
+
+    return {
+        'action': 'add',
+        'keyword': keyword,
+        'reply': reply,
+        'match_type': match_type
+    }
+
+def parse_review_cmd(msg: str) -> 'dict|None':
+    """
+    解析 /pass [uuid] 和 /reject [uuid] 命令
+    返回: dict | None
+      {
+        "action": "pass" | "reject",
+        "uuid": "<uuid>",
+      }
+    如果不匹配返回 None
+    """
+    m = RE_REVIEW.match(msg)
+    if not m:
+        return None
+    
+    head_cmd = m.group(1).strip()
+    if head_cmd.lower() in ['no', 'reject', '拒绝']:
+        action = 'reject'
+    elif head_cmd.lower() in ['pass', 'adopt', '采纳', '通过']:
+        action = 'pass'
+
+    uuid = m.group(2).strip()
+
+    if not uuid:
+        return None
+    
+    return {
+        'action': action,
+        'uuid': uuid
+    }

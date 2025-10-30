@@ -1,25 +1,31 @@
 import OlivOS
 from .config import DATA_PATH, CONF_PATH
-from .logger import logger
 import json
 import os
+import re
 
-OlivOS_DB = OlivOS.userModule.UserConfDB.DataBaseAPI
-
-class DB:
+class Logger:
     def __init__(self):
-        self.db: OlivOS_DB = None
-        self.namespace: str = None
+        self._Proc = None
 
-    def bind(self, database, namespace: str = 'OlivaUTU'):
-        self.db = database
-        self.namespace = namespace
+    def bind(self, Proc):
+        self._Proc = Proc
 
-    def get_data(self, key: str, default_value: any = None, pkl: bool = True):
-        return self.db.get_basic_config(namespace=self.namespace, key=key, default_value=default_value, pkl=pkl)
+    def _log(self, log_level: any, log_message: any, log_segment= None):
+        self._Proc.log(log_level, log_message, log_segment)
+
+    def info(self, log_message):
+        self._log(2, log_message=log_message)
     
-    def set_data(self, key: str, value: any, pkl: bool = True):
-        return self.db.set_basic_config(namespace=self.namespace, key=key, value=value, pkl=pkl)
+    def warn(self, log_message):
+        self._log(3, log_message=log_message)
+
+    def error(self, log_message):
+        self._log(4, log_message=log_message)
+
+def strip_leading_bot_at(msg: str, bot_id: str) -> str:
+    pattern = rf'^\s*\[CQ:at,qq={bot_id}\]\s*'
+    return re.sub(pattern, '', msg, count=1).strip()
 
 def write_json(obj, path = '') -> None:
     try:
@@ -35,7 +41,6 @@ def read_json(path = '') -> any:
     except FileNotFoundError:
         return {}
     except json.JSONDecodeError:
-        logger.info(f"JSON decode failed at {path}, returning empty dict")
         return {}
 
 def data_path(file_name=None) -> str:
