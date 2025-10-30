@@ -39,8 +39,10 @@ def read_json(path = '') -> any:
         with open(path, 'r', encoding='utf-8') as fp:
             return json.load(fp)
     except FileNotFoundError:
+        print('Error發生：1')
         return {}
     except json.JSONDecodeError:
+        print('Error發生：2')
         return {}
 
 def data_path(file_name=None) -> str:

@@ -17,6 +17,7 @@ RE_SUBMIT = re.compile(r'^[./。](?:投稿|submit|sbm)\s*(.+)$', re.I)
 # Non-AI regex 
 # /pass [uuid], /reject [uuid]
 RE_REVIEW = re.compile(r'^\s*[./。](pass|adopt|采纳|通过|no|reject|拒绝)\s*(.+)$', re.I)
+RE_GETHASH = re.compile('^[./。]gethash\s*(.+)$', re.I)
 
 OlivOS_BotInfo = OlivOS.API.bot_info_T
 OlivOS_Event = OlivOS.API.Event
@@ -117,17 +118,18 @@ def unity_reply(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
             key_hash = sbm_cmd['key_hash']
             
             tmp_data_union = read_json(data_path('custom'))
-            tmp_data_union['data'].pop(key_hash)
-            write_json(tmp_data_union, data_path('custom'))
-            
-            msg_deleted = reply_format(global_conf['DATA_DELETED'],key_hash=key_hash)
+            msg_deleted = reply_format(global_conf['DATA_NOT_FOUND'],key_hash=key_hash)
+            if tmp_data_union['data'].get(key_hash) is not None:
+                tmp_data_union['data'].pop(key_hash)
+                write_json(tmp_data_union, data_path('custom'))
+                msg_deleted = reply_format(global_conf['DATA_DELETED'],key_hash=key_hash)
             pevent.reply(msg_deleted)
             
         # 暂时定为直接输出序列化文本
         elif sbm_cmd['action'] == 'list':
-            tmp_res = read_json(conf_path('custom'))
+            tmp_res = read_json(data_path('custom'))
             res = json.dumps(tmp_res, indent=4, ensure_ascii=False)
-            return res
+            pevent.reply(res)    
         return
     
     if rev_cmd is not None:
@@ -164,7 +166,14 @@ def unity_reply(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
                 msg_rejected = reply_format(global_conf['SUBMISSION_REJECTED'], sbm_uuid=sbm_uuid)
                 pevent.send(send_type='private', target_id=author, message=msg_rejected)
                 pevent.reply(msg_rejected)
-                pass
+        return
+    
+    ghs_match = RE_GETHASH.match(msg)
+    if ghs_match is not None:
+        keyword = ghs_match.group(1)
+        key_hash = hashlib.md5(keyword.encode()).hexdigest()
+        print(key_hash)
+        pevent.reply(key_hash)
         return
     
     # 通过`消息文本hash`匹配`关键词文本hash`
