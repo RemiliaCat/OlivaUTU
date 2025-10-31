@@ -24,7 +24,7 @@ class Logger:
         self._log(4, log_message=log_message)
 
 def strip_leading_bot_at(msg: str, bot_id: str) -> str:
-    pattern = rf'^\s*\[CQ:at,qq={bot_id}\]\s*'
+    pattern = rf'^\s*\[(?:CQ:at,qq|OP:at,id)=.\]\s*'
     return re.sub(pattern, '', msg, count=1).strip()
 
 def write_json(obj, path = '') -> None:
