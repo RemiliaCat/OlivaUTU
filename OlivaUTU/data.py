@@ -3,21 +3,21 @@ from dataclasses import dataclass, field
 
 OlivOS_DB = OlivOS.userModule.UserConfDB.DataBaseAPI
 
-def gen_list():
+def _gen_list():
     return []
 
 @dataclass
 class DataUnit:
-    author: list[str] = field(default_factory=gen_list)
+    author: list[str] = field(default_factory=_gen_list)
     keyword: str = ''
-    reply: list[str] = field(default_factory=gen_list)
+    reply: list[str] = field(default_factory=_gen_list)
     match_type: str = ''
 
 @dataclass
 class CacheUnit:
     author: str = ''
     keyword: str = ''
-    reply: list[str] = field(default_factory=gen_list)
+    reply: list[str] = field(default_factory=_gen_list)
     match_type: str = ''
 
 @dataclass
@@ -29,21 +29,27 @@ class CacheUnion:
     data: CacheUnit
 
 class DB:
+    '''数据库类'''
+
     def __init__(self):
         self.db: OlivOS_DB = None
         self.namespace: str = None
 
-    def bind(self, database, namespace: str = 'OlivaUTU'):
+    def bind(self, database, namespace: str = 'OlivaUTU') -> None:
+        '''绑定userConfDB的database'''
         self.db = database
         self.namespace = namespace
 
-    def get_data(self, key: str, default_value: any = None, pkl: bool = True):
+    def get_data(self, key: str, default_value: any = None, pkl: bool = True) -> any:
+        '''对get_basic_config的封装，自动填写了namespace'''
         return self.db.get_basic_config(namespace=self.namespace, key=key, default_value=default_value, pkl=pkl)
     
-    def set_data(self, key: str, value: any, pkl: bool = True):
+    def set_data(self, key: str, value: any, pkl: bool = True) -> any:
+        '''对set_basic_config的封装，自动填写了namespace'''
         return self.db.set_basic_config(namespace=self.namespace, key=key, value=value, pkl=pkl)
 
-def create_data_unit(author: 'list[str]|None' = None, keyword: str = '', reply: 'str|list[str]' = None, match_type: str = 'full'):
+def create_data_unit(author: 'list[str]|None' = None, keyword: str = '', reply: 'str|list[str]' = None, match_type: str = 'full') -> dict:
+    '''data_unit数据结构的工厂创建方法'''
     if author is None:
         author = []
     if reply is None:
@@ -52,12 +58,13 @@ def create_data_unit(author: 'list[str]|None' = None, keyword: str = '', reply: 
         reply = [reply]
     return {
         'author': author,
-        'keyword': keyword, # any to trigger
-        'reply': reply, # random to reply
-        'match_type': match_type, # full/contain
+        'keyword': keyword,
+        'reply': reply,
+        'match_type': match_type
     }
 
-def create_data_union(data_units: dict = None): 
+def create_data_union(data_units: 'dict|None' = None) -> dict: 
+    '''data_union数据结构的工厂创建方法'''
     if data_units is None:
         data_units = {}
     return {
@@ -68,20 +75,22 @@ def create_data_union(data_units: dict = None):
             # more to add...
     }
 
-def create_cache_unit(author: str = '', keyword: str = '', reply: 'str|list[str]' = None, match_type: str = 'full'):
+def create_cache_unit(author: str = '', keyword: str = '', reply: 'str|list[str]' = None, match_type: str = 'full') -> dict:
+    '''cache_unit数据结构的工厂创建方法'''
     if reply is None:
         reply = []
     elif isinstance(reply, str):
         reply = [reply]
     return {
         'author': author,
-        'keyword': keyword, # any to trigger
-        'reply': reply, # random to reply
-        'match_type': match_type, # full/contain
+        'keyword': keyword,
+        'reply': reply,
+        'match_type': match_type
     }
 
 
-def create_cache_union(cache_units: dict = None):
+def create_cache_union(cache_units: dict = None) -> dict:
+    '''cache_union数据结构的工厂创建方法'''
     if cache_units is None:
         cache_units = {}
     return {
@@ -92,14 +101,13 @@ def create_cache_union(cache_units: dict = None):
             # more to add...
     }
 
-def get_data_from_cache_unit(cache_unit, data_unit = None) -> dict[str, any]:
-
+def get_data_from_cache(cache_unit, data_unit = None) -> dict:
+    '''将cache_unit转换为data_unit'''
     reply = cache_unit.get('reply')
     if isinstance(reply, str):
         reply = [reply]
     elif reply is None:
         reply = []
-
     tmp_data_unit = data_unit
     if data_unit is None:
         tmp_data_unit = create_data_unit()
