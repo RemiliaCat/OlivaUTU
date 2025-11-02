@@ -192,7 +192,7 @@ def handle_sbm_add(pevent, sbm_uuid, author, keyword, reply, match_type) -> None
     write_json(tmp_cache_union, data_path(CACHE_FILE_NAME))
 
     if pevent.data.user_id in gconf['WHITE_USERS']:
-        handle_rev_pass()
+        handle_rev_pass(pevent=pevent, sbm_uuid=sbm_uuid)
         return
 
     msg_received = reply_format(gconf['msgCustom']['NEW_SUBMISSION_RECEIVED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
