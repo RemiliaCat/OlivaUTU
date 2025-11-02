@@ -191,18 +191,16 @@ def handle_sbm_add(pevent, sbm_uuid, author, keyword, reply, match_type) -> None
     tmp_cache_union['data'][sbm_uuid] = tmp_cache_unit
     write_json(tmp_cache_union, data_path(CACHE_FILE_NAME))
 
-    if pevent.data.user_id in gconf['WHITE_USERS']:
-        handle_rev_pass(pevent=pevent, sbm_uuid=sbm_uuid)
-        return
-
     msg_received = reply_format(gconf['msgCustom']['NEW_SUBMISSION_RECEIVED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
     for group_id in gconf.get('NEW_SUBMISSION_RECEIVE_GROUP'):
         pevent.send(message=msg_received, send_type='group', target_id=group_id)
     for user_id in gconf.get('NEW_SUBMISSION_RECEIVE_PRIVATE'):
         pevent.send(message=msg_received, send_type='private', target_id=user_id)
-
     msg_submitted = reply_format(gconf['msgCustom']['SUBMISSION_DELIVERED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
     pevent.reply(msg_submitted)
+
+    if pevent.data.user_id in gconf['WHITE_USERS']:
+        handle_rev_pass(pevent=pevent, sbm_uuid=sbm_uuid)
 
 def handle_sbm_del(pevent, key_hash) -> None:
     '''处理sbm命令中的del子命令'''
