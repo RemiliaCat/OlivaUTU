@@ -4,7 +4,7 @@
     "namespace": "OlivaUTU",
     "info": "Up To You, User - 由用户自定义决定机器人的回复词\n回复词投稿：/submit [关键词]-[回复词]\n回复词采纳：/pass [uuid]",
     "priority": 30000,
-    "svn": 2,
+    "svn": 3,
     "compatible_svn": 186,
     "message_mode": "olivos_string",
     "support": [
