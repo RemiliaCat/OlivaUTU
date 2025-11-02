@@ -39,20 +39,20 @@ class Event(object):
         pass
 
     def group_message(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
-        if gconf['FILTER_GROUP_TYPE'].lower() == 'blacklist':
+        if gconf['filter']['FILTER_GROUP_TYPE'].lower() == 'blacklist':
             if plugin_event.data.group_id in gconf['FILTER_GROUP_LIST']:
                 return
-        elif gconf['FILTER_GROUP_TYPE'].lower() == 'whitelist':
+        elif gconf['filter']['FILTER_GROUP_TYPE'].lower() == 'whitelist':
             if plugin_event.data.group_id not in gconf['FILTER_GROUP_LIST']:
                 return
         if db.get_data('switch', True, False):
             unity_reply(plugin_event, Proc)
     
     def private_message(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
-        if gconf['FILTER_PRIVATE_TYPE'].lower() == 'blacklist':
+        if gconf['filter']['FILTER_PRIVATE_TYPE'].lower() == 'blacklist':
             if plugin_event.data.user_id in gconf['FILTER_PRIVATE_LIST']:
                 return
-        elif gconf['FILTER_PRIVATE_TYPE'].lower() == 'whitelist':
+        elif gconf['filter']['FILTER_PRIVATE_TYPE'].lower() == 'whitelist':
             if plugin_event.data.user_id not in gconf['FILTER_PRIVATE_LIST']:
                 return
         if db.get_data('switch', True, False):
@@ -191,13 +191,13 @@ def handle_sbm_add(pevent, sbm_uuid, author, keyword, reply, match_type) -> None
         handle_rev_pass()
         return
 
-    msg_received = reply_format(gconf['NEW_SUBMISSION_RECEIVED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
+    msg_received = reply_format(gconf['msgCustom']['NEW_SUBMISSION_RECEIVED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
     for group_id in gconf.get('NEW_SUBMISSION_RECEIVE_GROUP'):
         pevent.send(message=msg_received, send_type='group', target_id=group_id)
     for user_id in gconf.get('NEW_SUBMISSION_RECEIVE_PRIVATE'):
         pevent.send(message=msg_received, send_type='private', target_id=user_id)
 
-    msg_submitted = reply_format(gconf['SUBMISSION_DELIVERED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
+    msg_submitted = reply_format(gconf['msgCustom']['SUBMISSION_DELIVERED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
     pevent.reply(msg_submitted)
 
 def handle_sbm_del(pevent, key_hash) -> None:
@@ -212,8 +212,8 @@ def handle_sbm_del(pevent, key_hash) -> None:
         match_type = tmp_data_unit.get('match_type')
         tmp_data_union['data'].pop(key_hash)
         write_json(tmp_data_union, data_path(DATA_FILE_NAME))
-        msg_deleted = reply_format(gconf['DATA_DELETED'],key_hash=key_hash, author=author, keyword=keyword, reply=reply, match_type=match_type)
-    msg_deleted = reply_format(gconf['DATA_NOT_FOUND'],key_hash=key_hash)
+        msg_deleted = reply_format(gconf['msgCustom']['DATA_DELETED'],key_hash=key_hash, author=author, keyword=keyword, reply=reply, match_type=match_type)
+    msg_deleted = reply_format(gconf['msgCustom']['DATA_NOT_FOUND'],key_hash=key_hash)
     pevent.reply(msg_deleted)
 
 def handle_sbm_show(pevent, key_hash) -> None:
@@ -221,13 +221,13 @@ def handle_sbm_show(pevent, key_hash) -> None:
     tmp_data_union = read_json(data_path(DATA_FILE_NAME))
     tmp_data_unit = tmp_data_union.get('data').get(key_hash)
     if tmp_data_union is None:
-        msg_not_found = reply_format(gconf['DATA_NOT_FOUND'], key_hash=key_hash)
+        msg_not_found = reply_format(gconf['msgCustom']['DATA_NOT_FOUND'], key_hash=key_hash)
         pevent.reply(msg_not_found)
     author = tmp_data_unit.get('author')
     keyword = tmp_data_unit.get('keyword')
     reply = tmp_data_unit.get('reply')
     match_type = tmp_data_unit.get('match_type')
-    msg_show_data = reply_format(gconf['DATA_SHOW'], key_hash=key_hash, author=author, keyword=keyword, reply=reply, match_type=match_type)
+    msg_show_data = reply_format(gconf['msgCustom']['DATA_SHOW'], key_hash=key_hash, author=author, keyword=keyword, reply=reply, match_type=match_type)
     pevent.reply(msg_show_data)
 
 def handle_sbm_list(pevent) -> None:
@@ -244,7 +244,7 @@ def handle_rev_pass(pevent, sbm_uuid) -> None:
     tmp_cache_union = read_json(data_path(CACHE_FILE_NAME))
     tmp_cache_unit = tmp_cache_union.get('data').get(sbm_uuid)
     if tmp_cache_unit is None:
-        msg_not_found = reply_format(gconf['SUBMISSION_NOT_FOUND'], sbm_uuid=sbm_uuid)
+        msg_not_found = reply_format(gconf['msgCustom']['SUBMISSION_NOT_FOUND'], sbm_uuid=sbm_uuid)
         pevent.reply(msg_not_found)
         return
     
@@ -260,7 +260,7 @@ def handle_rev_pass(pevent, sbm_uuid) -> None:
     write_json(tmp_data_union, data_path(DATA_FILE_NAME))
     write_json(tmp_cache_union, data_path(CACHE_FILE_NAME))
 
-    msg_passed = reply_format(gconf['SUBMISSION_PASSED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
+    msg_passed = reply_format(gconf['msgCustom']['SUBMISSION_PASSED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
     pevent.send(send_type='private', target_id=author, message=msg_passed)
     pevent.reply(msg_passed)
 
@@ -276,7 +276,7 @@ def handle_rev_reject(pevent, sbm_uuid) -> None:
     tmp_cache_union['data'].pop(sbm_uuid)
     write_json(tmp_cache_union, data_path(CACHE_FILE_NAME))
 
-    msg_rejected = reply_format(gconf['SUBMISSION_REJECTED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
+    msg_rejected = reply_format(gconf['msgCustom']['SUBMISSION_REJECTED'], sbm_uuid=sbm_uuid, author=author, keyword=keyword, reply=reply, match_type=match_type)
     pevent.send(send_type='private', target_id=author, message=msg_rejected)
     pevent.reply(msg_rejected)
 
