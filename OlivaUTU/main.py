@@ -30,6 +30,8 @@ class Event(object):
         db.bind(Proc.database)
         global gconf
         gconf = DEFAULT_CUSTOM_CONFIG
+        global gswitch
+        gswitch = True
         global glogger
         glogger = utils.Logger()
         glogger.bind(Proc)
@@ -40,22 +42,22 @@ class Event(object):
 
     def group_message(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
         if gconf['filter']['FILTER_GROUP_TYPE'].lower() == 'blacklist':
-            if plugin_event.data.group_id in gconf['FILTER_GROUP_LIST']:
+            if plugin_event.data.group_id in gconf['filter']['FILTER_GROUP_LIST']:
                 return
         elif gconf['filter']['FILTER_GROUP_TYPE'].lower() == 'whitelist':
-            if plugin_event.data.group_id not in gconf['FILTER_GROUP_LIST']:
+            if plugin_event.data.group_id not in gconf['filter']['FILTER_GROUP_LIST']:
                 return
-        if db.get_data('switch', True, False):
+        if gswitch:
             unity_reply(plugin_event, Proc)
     
     def private_message(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
         if gconf['filter']['FILTER_PRIVATE_TYPE'].lower() == 'blacklist':
-            if plugin_event.data.user_id in gconf['FILTER_PRIVATE_LIST']:
+            if plugin_event.data.user_id in gconf['filter']['FILTER_PRIVATE_LIST']:
                 return
         elif gconf['filter']['FILTER_PRIVATE_TYPE'].lower() == 'whitelist':
-            if plugin_event.data.user_id not in gconf['FILTER_PRIVATE_LIST']:
+            if plugin_event.data.user_id not in gconf['filter']['FILTER_PRIVATE_LIST']:
                 return
-        if db.get_data('switch', True, False):
+        if gswitch:
             unity_reply(plugin_event, Proc)
 
     def save(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
@@ -108,12 +110,12 @@ def unity_reply(plugin_event:OlivOS_Event, Proc:OlivOS_Proc) -> None:
         # 暂定显示所有key_hash及其对应keyword，可能改为近30个回复词
         elif sbm_cmd['action'] == 'list':
             if  pevent.data.user_id in gconf['ADMINISTRATORS']:
-                handle_sbm_list
+                handle_sbm_list(pevent=pevent)
         return
     
     rev_cmd = parse_rev_cmd(msg)
     if rev_cmd is not None:
-        if pevent.data.user_id in str(gconf['ADMINISTRATORS']):
+        if pevent.data.user_id in gconf['ADMINISTRATORS']:
             # /pass [uuid]
             if rev_cmd['action'] == 'pass':
                 sbm_uuid = rev_cmd['uuid']
@@ -138,7 +140,7 @@ def unity_reply(plugin_event:OlivOS_Event, Proc:OlivOS_Proc) -> None:
     tmp_data_union = read_json(data_path(DATA_FILE_NAME))
     if tmp_data_union.get('data').get(key_hash) is None:
         return
-    if tmp_data_union.get('data').get(key_hash).get('reply').empty():
+    if len(tmp_data_union.get('data').get(key_hash).get('reply')) == 0:
         return
     msg_reply = random.choice(tmp_data_union['data'][key_hash]['reply'])
     pevent.reply(msg_reply)
@@ -170,11 +172,13 @@ def unity_load() -> None:
 
 def plugin_on() -> None:
     '''menu事件中的plugin_on事件处理'''
-    db.set_data('switch', True, False)
+    global gswitch
+    gswitch = True
 
 def plugin_off() -> None:
     '''menu事件中的plugin_off事件处理'''
-    db.set_data('switch', False, False)
+    global gswitch
+    gswitch = False
 
 def plugin_reload() -> None:
     '''menu事件中的plugin_reload事件处理'''
@@ -204,17 +208,17 @@ def handle_sbm_del(pevent, key_hash) -> None:
     '''处理sbm命令中的del子命令'''
     tmp_data_union = read_json(data_path(DATA_FILE_NAME))
     tmp_data_unit = tmp_data_union.get('data').get(key_hash)
-    if tmp_data_union['data'].get(key_hash) is not None:
-        tmp_data_unit = tmp_data_union['data'][key_hash]
-        author = tmp_data_unit.get('author')
-        keyword = tmp_data_unit.get('keyword')
-        reply = tmp_data_unit.get('reply')
-        match_type = tmp_data_unit.get('match_type')
-        tmp_data_union['data'].pop(key_hash)
-        write_json(tmp_data_union, data_path(DATA_FILE_NAME))
-        msg_deleted = reply_format(gconf['msgCustom']['DATA_DELETED'],key_hash=key_hash, author=author, keyword=keyword, reply=reply, match_type=match_type)
-    msg_deleted = reply_format(gconf['msgCustom']['DATA_NOT_FOUND'],key_hash=key_hash)
-    pevent.reply(msg_deleted)
+    if tmp_data_union['data'].get(key_hash) is None:
+        msg_deleted = reply_format(gconf['msgCustom']['DATA_NOT_FOUND'],key_hash=key_hash)
+        return pevent.reply(msg_deleted)
+    tmp_data_unit = tmp_data_union['data'][key_hash]
+    author = tmp_data_unit.get('author')
+    keyword = tmp_data_unit.get('keyword')
+    reply = tmp_data_unit.get('reply')
+    match_type = tmp_data_unit.get('match_type')
+    tmp_data_union['data'].pop(key_hash)
+    write_json(tmp_data_union, data_path(DATA_FILE_NAME))
+    msg_deleted = reply_format(gconf['msgCustom']['DATA_DELETED'],key_hash=key_hash, author=author, keyword=keyword, reply=reply, match_type=match_type)
 
 def handle_sbm_show(pevent, key_hash) -> None:
     '''处理sbm命令中的show子命令'''
