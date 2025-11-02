@@ -219,6 +219,7 @@ def handle_sbm_del(pevent, key_hash) -> None:
     tmp_data_union['data'].pop(key_hash)
     write_json(tmp_data_union, data_path(DATA_FILE_NAME))
     msg_deleted = reply_format(gconf['msgCustom']['DATA_DELETED'],key_hash=key_hash, author=author, keyword=keyword, reply=reply, match_type=match_type)
+    pevent.reply(msg_deleted)
 
 def handle_sbm_show(pevent, key_hash) -> None:
     '''处理sbm命令中的show子命令'''
