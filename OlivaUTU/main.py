@@ -10,11 +10,11 @@ import uuid
 import os
 import re
 
-# /submit [关键词]-[回复词](-[匹配类型])
+# /submit <add/del/show/list>, 要修改命令别名请一并修改parse_sbm_cmd()函数
 RE_SUBMIT = re.compile(r'^\s*[./。](?:投稿|submit|sbm)\s*(.+)$', re.I | re.S)
-# /pass [uuid], /reject [uuid]
+# /pass [uuid], /reject [uuid], 要修改命令别名请一并修改parse_rev_cmd()函数
 RE_REVIEW = re.compile(r'^\s*[./。](pass|adopt|采纳|通过|no|reject|拒绝)\s*(.+)$', re.I)
-# /getHash [关键词]
+# /getHash [关键词], 仅可获取key_hash, 无法获取sbm_uuid
 RE_GETHASH = re.compile(r'^\s*[./。]gethash\s*(.+)$', re.I | re.S)
 
 # 类型别名设置
@@ -299,22 +299,26 @@ def parse_sbm_cmd(msg: str) -> 'dict|None':
         return None
     body = m.group(1).strip()
 
+    # del
     if body.lower().startswith('del'):
         key_hash = body[3:].strip()
         if not key_hash:
             return None
         return {'action': 'del', 'key_hash': key_hash}
     
+    # show
     if body.lower().startswith('show'):
         key_hash = body[4:].strip()
         if not key_hash:
             return None
         return {'action': 'show', 'key_hash': key_hash}
-    
+    # list
     if body.lower() == 'list':
         return {'action': 'list'}
     
-    # if body.lower().startswith('add'):
+    # add，之后的逻辑也是add的逻辑
+    if body.lower().startswith('add'):
+        body = body[4:].strip()
     parts = []
     buf = ''
 
