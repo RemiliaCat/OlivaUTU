@@ -8,6 +8,7 @@ def _gen_list():
 
 @dataclass
 class DataUnit:
+    key_hash: str = ''
     author: list[str] = field(default_factory=_gen_list)
     keyword: str = ''
     reply: list[str] = field(default_factory=_gen_list)
@@ -15,38 +16,66 @@ class DataUnit:
 
 @dataclass
 class CacheUnit:
+    sbm_uuid: str = ''
     author: str = ''
     keyword: str = ''
     reply: list[str] = field(default_factory=_gen_list)
     match_type: str = ''
 
-@dataclass
-class DataUnion:
-    data: DataUnit
-
-@dataclass
-class CacheUnion:
-    data: CacheUnit
-
 class DB:
-    '''数据库类'''
+    '''
+    数据库类
+    使用了@rainboat的userConfDB模块，主要使用该模块提供的更低级接口
+    '''
 
     def __init__(self):
         self.db: OlivOS_DB = None
         self.namespace: str = None
 
-    def bind(self, database, namespace: str = 'OlivaUTU') -> None:
+    def bind(self, database: OlivOS_DB, namespace: str = 'OlivaUTU') -> None:
         '''绑定userConfDB的database'''
         self.db = database
         self.namespace = namespace
 
-    def get_data(self, key: str, default_value: any = None, pkl: bool = True) -> any:
-        '''对get_basic_config的封装，自动填写了namespace'''
-        return self.db.get_basic_config(namespace=self.namespace, key=key, default_value=default_value, pkl=pkl)
+    def set_data_from_DataUnit(self, unit: DataUnit):
+        '''通过传入DataUnit来存储数据，通过key_hash区分每一个DataUnit，自动填写了namespace'''
+        key_hash = unit.key_hash
+        author = unit.author
+        keyword = unit.keyword
+        reply = unit.reply
+        match_type = unit.match_type
+        self.db.set_config(namespace=self.namespace, key='key_hash', value=key_hash, basic_hashed=key_hash, pkl=False)
+        self.db.set_config(namespace=self.namespace, key='author', value=author, basic_hashed=key_hash, pkl=True)
+        self.db.set_config(namespace=self.namespace, key='keyword', value=keyword, basic_hashed=key_hash, pkl=False)
+        self.db.set_config(namespace=self.namespace, key='reply', value=reply, basic_hashed=key_hash, pkl=True)
+        self.db.set_config(namespace=self.namespace, key='match_type', value=match_type, basic_hashed=key_hash, pkl=False)
+
+    def set_data_from_CacheUnit(self, unit: CacheUnit):
+        '''通过传入CacheUnit来传入数据，通过sbm_uuid区分每一个CacheUnit，自动填写了namespace'''
+        sbm_uuid = unit.sbm_uuid
+        author = unit.author
+        keyword = unit.keyword
+        reply = unit.reply
+        match_type = unit.match_type
+        self.db.set_config(namespace=self.namespace, key='key_hash', value=sbm_uuid, basic_hashed=sbm_uuid, pkl=False)
+        self.db.set_config(namespace=self.namespace, key='author', value=author, basic_hashed=sbm_uuid, pkl=True)
+        self.db.set_config(namespace=self.namespace, key='keyword', value=keyword, basic_hashed=sbm_uuid, pkl=False)
+        self.db.set_config(namespace=self.namespace, key='reply', value=reply, basic_hashed=sbm_uuid, pkl=True)
+        self.db.set_config(namespace=self.namespace, key='match_type', value=match_type, basic_hashed=sbm_uuid, pkl=False)
+
+    def get_data_as_DataUnit(self, key_hash):
+        pass
+
+    def get_data_as_CacheUnit(self, sbm_uuid):
+        pass
+
+    def get_data(self, key: str, hash: 'str|None' = None, default_value: any = None, pkl: bool = True) -> any:
+        '''对低级接口get_config()的封装，自动填写了namespace'''
+        return self.db.get_config(namespace=self.namespace, key=key, basic_hashed=hash, default_value=default_value, pkl=pkl)
     
-    def set_data(self, key: str, value: any, pkl: bool = True) -> any:
-        '''对set_basic_config的封装，自动填写了namespace'''
-        return self.db.set_basic_config(namespace=self.namespace, key=key, value=value, pkl=pkl)
+    def set_data(self, key: str, value: 'any', hash: 'str|None' = None, pkl: bool = True) -> bool:
+        '''对低级接口set_config()的封装，自动填写了namespace'''
+        return self.db.set_config(self.namespace, key=key,  value=value, basic_hashed=hash, pkl=pkl)
 
 def create_data_unit(author: 'list[str]|None' = None, keyword: str = '', reply: 'str|list[str]' = None, match_type: str = 'full') -> dict:
     '''data_unit数据结构的工厂创建方法'''
