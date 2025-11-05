@@ -1,5 +1,5 @@
 import OlivOS
-from .utils import conf_path, data_path, read_json, write_json, reply_format
+from .utils import conf_path, data_path, imgs_path, read_json, write_json, reply_format
 from .config import DEFAULT_CUSTOM_CONFIG, DATA_FILE_NAME, CACHE_FILE_NAME
 from . import config
 from . import utils
@@ -156,6 +156,9 @@ def unity_load() -> None:
     if not os.path.exists(conf_path()):
         os.makedirs(config.CONF_PATH)
 
+    if not os.path.exists(imgs_path()):
+        os.makedirs(config.IMAGE_PATH)
+
     if not os.path.exists(conf_path('config')):
         write_json(config.DEFAULT_CUSTOM_CONFIG, conf_path('config'))
     gconf = read_json(conf_path('config'))
@@ -186,6 +189,8 @@ def plugin_reload() -> None:
 
 def handle_sbm_add(pevent, sbm_uuid, author, keyword, reply, match_type) -> None:
     '''处理sbm命令中的add子命令'''
+    reply = utils.parse_OPcode_image(reply) # 存储图片
+
     tmp_cache_union = read_json(data_path(CACHE_FILE_NAME))
     tmp_cache_unit = data.create_cache_unit(author, keyword, reply, match_type)
     tmp_cache_union['data'][sbm_uuid] = tmp_cache_unit

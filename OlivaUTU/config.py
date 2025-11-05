@@ -1,9 +1,11 @@
+import os
 # CONST
-DATA_PATH = 'plugin/data/OlivaUTU'
+DATA_PATH = os.path.join('plugin', 'data', 'OlivaUTU')
 DATA_FILE_NAME = 'custom'
 CACHE_FILE_NAME = 'cache'
-CONF_PATH = 'plugin/conf/OlivaUTU'
+CONF_PATH = os.path.join('plugin', 'conf', 'OlivaUTU')
 CONF_PATH_NAME = 'config'
+IMAGE_PATH = os.path.join('data', 'images', 'OlivaUTU')
 DEFAULT_CUSTOM_CONFIG = {
     'ADMINISTRATORS': ['2115963339'],
     'WHITE_USERS': [],   # 白名单用户，请小心填写

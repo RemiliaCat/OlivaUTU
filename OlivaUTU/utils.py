@@ -1,5 +1,6 @@
 import OlivOS
-from .config import DATA_PATH, CONF_PATH
+from .config import DATA_PATH, CONF_PATH, IMAGE_PATH
+import requests
 import json
 import os
 import re
@@ -35,6 +36,50 @@ def strip_leading_bot_at(msg: str, bot_id: str) -> str:
     pattern = rf'^\s*\[(?:CQ:at,qq|OP:at,id)={bot_id}\]\s*'
     return re.sub(pattern, '', msg, count=1).strip()
 
+def parse_OPcode_image(string: 'str|list') -> 'str|list':
+    '''
+    AI generate, 同步版本, 无法高效处理多个带图投稿请求
+    解析 [OP:image,file=...,url=...] 格式,
+    下载 url 对应的图片并保存为 data/images/{filename}, 
+    然后将 OP 码改为 [OP:image,file=OlivaUTU/{filename}]
+    '''
+
+    # 可传入list，例如reply列表
+    if isinstance(string, list):
+        return [parse_OPcode_image(s) for s in string]
+
+    pattern = re.compile(
+        r'\[OP:image,file=(?P<file>[^,\]]+),url=(?P<url>[^\]]+)\]'
+    )
+
+    def repl(match):
+        headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Linux; Android 13; M2102K1AC) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Mobile Safari/537.36 QQ/9.9.50.12345"
+        ),
+        "Referer": "https://qq.com/",
+        }
+
+        file_name = match.group('file')
+        url = match.group('url')
+        # try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        print(resp.status_code)
+        resp.raise_for_status()
+        print(imgs_path(file_name))
+        with open(imgs_path(file_name), 'wb') as f:
+            f.write(resp.content)
+            print('hello1')
+        # except Exception:
+        #     print('hello2')
+        #     return match.group(0)  # 保留原码以防失败
+        print('hello3')
+        return f'[OP:image,file=OlivaUTU/{file_name}]'
+    print('hello4')
+    return pattern.sub(repl, string)
+
 def write_json(obj, path = '') -> None:
     '''覆写指定路径的json文件'''
     try:
@@ -62,6 +107,10 @@ def data_path(file_name=None) -> str:
 def conf_path(file_name=None) -> str:
     '''配置文件的路径'''
     return os.path.join(CONF_PATH, f'{file_name}.json') if file_name else CONF_PATH
+
+def imgs_path(file_name=None) -> str:
+    '''图片文件的路径'''
+    return os.path.join(IMAGE_PATH, f'{file_name}') if file_name else IMAGE_PATH
 
 def reply_format(msg: str, /, **attrs) -> str:
     '''
