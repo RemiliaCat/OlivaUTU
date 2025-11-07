@@ -4,6 +4,7 @@ from .config import DEFAULT_CUSTOM_CONFIG, DATA_FILE_NAME, CACHE_FILE_NAME
 from . import config
 from . import utils
 from . import data
+import requests
 import hashlib
 import random
 import uuid
@@ -16,6 +17,8 @@ RE_SUBMIT = re.compile(r'^\s*[./。](?:投稿|submit|sbm)\s*(.+)$', re.I | re.S)
 RE_REVIEW = re.compile(r'^\s*[./。](pass|adopt|采纳|通过|no|reject|拒绝)\s*(.+)$', re.I)
 # /getHash [关键词], 仅可获取key_hash, 无法获取sbm_uuid
 RE_GETHASH = re.compile(r'^\s*[./。]gethash\s*(.+)$', re.I | re.S)
+# 匹配消息中的图片
+RE_OP_IMAGE = re.compile(r'\[OP:image,file=(?P<file>[^\],]+)(?:,url=(?P<url>[^\]]+))?\]')
 
 # 类型别名设置
 OlivOS_Event = OlivOS.API.Event
@@ -189,7 +192,9 @@ def plugin_reload() -> None:
 
 def handle_sbm_add(pevent, sbm_uuid, author, keyword, reply, match_type) -> None:
     '''处理sbm命令中的add子命令'''
-    reply = utils.parse_OPcode_image(reply) # 存储图片
+    img_data = utils.parse_OPcode_image(reply)
+    utils.save_image(img_data)
+    reply = [RE_OP_IMAGE.sub(utils.repl_OPcode_image, r) for r in reply]
 
     tmp_cache_union = read_json(data_path(CACHE_FILE_NAME))
     tmp_cache_unit = data.create_cache_unit(author, keyword, reply, match_type)
@@ -221,6 +226,11 @@ def handle_sbm_del(pevent, key_hash) -> None:
     match_type = tmp_data_unit.get('match_type')
     tmp_data_union['data'].pop(key_hash)
     write_json(tmp_data_union, data_path(DATA_FILE_NAME))
+
+    print(f'reply: {reply}')
+    img_data = utils.parse_OPcode_image(reply)
+    utils.delete_image(img_data)
+    
     msg_deleted = reply_format(gconf['msgCustom']['DATA_DELETED'],key_hash=key_hash, author=author, keyword=keyword, reply=reply, match_type=match_type)
     pevent.reply(msg_deleted)
 
@@ -281,6 +291,8 @@ def handle_rev_reject(pevent, sbm_uuid) -> None:
         keyword = tmp_cache_unit.get('keyword')
         reply = tmp_cache_unit.get('reply')
         match_type = tmp_cache_unit.get('match_type')
+        img_data = utils.parse_OPcode_image(reply)
+        utils.delete_image(img_data)
     tmp_cache_union['data'].pop(sbm_uuid)
     write_json(tmp_cache_union, data_path(CACHE_FILE_NAME))
 

@@ -1,9 +1,12 @@
 import OlivOS
 from .config import DATA_PATH, CONF_PATH, IMAGE_PATH
-import requests
+import urllib.request
+import shutil
 import json
 import os
 import re
+
+RE_OP_IMAGE = re.compile(r'\[OP:image,file=(?P<file>[^\],]+)(?:,url=(?P<url>[^\]]+))?\]')
 
 class Logger:
     '''日志记录类'''
@@ -36,49 +39,49 @@ def strip_leading_bot_at(msg: str, bot_id: str) -> str:
     pattern = rf'^\s*\[(?:CQ:at,qq|OP:at,id)={bot_id}\]\s*'
     return re.sub(pattern, '', msg, count=1).strip()
 
-def parse_OPcode_image(string: 'str|list') -> 'str|list':
+def parse_OPcode_image(msg: 'str|list[str]') -> list[dict]:
     '''
-    AI generate, 同步版本, 无法高效处理多个带图投稿请求
-    解析 [OP:image,file=...,url=...] 格式,
-    下载 url 对应的图片并保存为 data/images/{filename}, 
-    然后将 OP 码改为 [OP:image,file=OlivaUTU/{filename}]
+    :brief: 解析 [OP:image,file=...,url=...] 格式,
+    :param string: 要解析OPCode的字符串
+    :return: 由包含file和url的字典组成的列表, 例如: [{'file':..., 'url': ...}]
     '''
+    msg_str = '\n'.join(msg) if isinstance(msg, list) else msg
+    print(msg_str)
+    tmp_res_list = []
+    for m in RE_OP_IMAGE.finditer(msg_str):
+        tmp_res_list.append(m.groupdict())
+    return tmp_res_list
 
-    # 可传入list，例如reply列表
-    if isinstance(string, list):
-        return [parse_OPcode_image(s) for s in string]
+def repl_OPcode_image(match: re.Match):
+    file_name = match.group('file')
+    file_path = os.path.join('OlivaUTU', file_name)
+    return f'[OP:image,file={file_path}]'
 
-    pattern = re.compile(
-        r'\[OP:image,file=(?P<file>[^,\]]+),url=(?P<url>[^\]]+)\]'
-    )
-
-    def repl(match):
-        headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Linux; Android 13; M2102K1AC) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Mobile Safari/537.36 QQ/9.9.50.12345"
-        ),
-        "Referer": "https://qq.com/",
-        }
-
-        file_name = match.group('file')
-        url = match.group('url')
-        # try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        print(resp.status_code)
-        resp.raise_for_status()
-        print(imgs_path(file_name))
-        with open(imgs_path(file_name), 'wb') as f:
-            f.write(resp.content)
-            print('hello1')
-        # except Exception:
-        #     print('hello2')
-        #     return match.group(0)  # 保留原码以防失败
-        print('hello3')
-        return f'[OP:image,file=OlivaUTU/{file_name}]'
-    print('hello4')
-    return pattern.sub(repl, string)
+def save_image(img_list: list[dict]) -> list[str]:
+    '''下载QQ图片, 返回图片路径列表'''
+    saved_files = []
+    for img in img_list:
+        file_path = imgs_path(img['file'])
+        url = img['url']
+        try:
+            urllib.request.urlretrieve(url, file_path)
+            saved_files.append(file_path)
+            print('保存成功!')
+        except:
+            print('保存失败!')
+            pass
+    return saved_files
+            
+def delete_image(img_list: list[dict]) -> None:
+    '''删除图片文件'''
+    print(img_list)
+    for img in img_list:
+        file_path = os.path.join('data', 'images', img['file'])
+        try:
+            os.remove(file_path)
+            print('删除成功!')
+        except:
+            print('删除失败!')
 
 def write_json(obj, path = '') -> None:
     '''覆写指定路径的json文件'''
