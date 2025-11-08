@@ -7,6 +7,7 @@ CONF_PATH = os.path.join('plugin', 'conf', 'OlivaUTU')
 CONF_PATH_NAME = 'config'
 IMAGE_PATH = os.path.join('data', 'images', 'OlivaUTU')
 DEFAULT_CUSTOM_CONFIG = {
+    'NICKNAME': 'Priestess',
     'ADMINISTRATORS': ['2115963339'],
     'WHITE_USERS': [],   # 白名单用户，请小心填写
     'NEW_SUBMISSION_RECEIVE_GROUP': [],

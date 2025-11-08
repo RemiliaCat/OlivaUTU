@@ -1,7 +1,7 @@
 import OlivOS
 from .config import DATA_PATH, CONF_PATH, IMAGE_PATH
 import urllib.request
-import shutil
+import requests
 import json
 import os
 import re
@@ -33,6 +33,87 @@ class Logger:
     def error(self, log_message: str) -> None:
         '''log_level为error'''
         self._log(4, log_message=log_message)
+
+def get_account_config(plugin_event, Proc):
+    """从Proc对象获取账号配置，根据当前bot的hash匹配对应账号，失败时返回None，来自Desom-fu"""
+    if Proc is None:
+        return None
+    
+    try:
+        # 获取当前bot的hash
+        bot_hash = plugin_event.bot_info.hash
+        
+        # 从Proc中获取bot信息
+        bot_info_dict = Proc.Proc_data.get('bot_info_dict', {})
+        if bot_hash not in bot_info_dict:
+            return None
+        
+        bot_info = bot_info_dict[bot_hash]
+        post_info = bot_info.post_info
+        
+        # 检查必要的字段是否存在
+        if post_info.host is None or post_info.port == -1 or post_info.access_token is None:
+            return None
+        
+        # 构建server_config字典
+        server_config = {
+            'host': post_info.host,
+            'port': post_info.port,
+            'access_token': post_info.access_token
+        }
+        
+        return server_config
+    except Exception as e:
+        print(f"从Proc获取账号配置失败: {e}")
+        return None
+
+def create_forward_node(user_id, nickname, content):
+    '''创建转发消息节点，来自Desom-fu'''
+    return {
+        'type': 'node',
+        'data': {
+            'user_id': str(user_id),
+            'nickname': nickname,
+            'content': content
+        }
+    }
+
+def send_forward_message(plugin_event, messages, server_config):
+    '''发送转发消息，来自Desom-fu'''
+    forward_data = {
+        "Type": "Http",
+        "Host": server_config["host"].replace("http://", "").replace("https://", ""),
+        "Port": server_config["port"],
+        "AccessToken": server_config["access_token"]
+    }
+    
+    if plugin_event.plugin_info['func_type'] == 'group_message':
+        api_url = f"http://{forward_data['Host']}:{forward_data['Port']}/send_group_forward_msg"
+        payload = {
+            "group_id": plugin_event.data.group_id,
+            "messages": messages
+        }
+    else:
+        api_url = f"http://{forward_data['Host']}:{forward_data['Port']}/send_private_forward_msg"
+        payload = {
+            "user_id": plugin_event.data.user_id,
+            "messages": messages
+        }
+    
+    headers = {
+        "Authorization": f"Bearer {forward_data['AccessToken']}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.post(
+            api_url,
+            data=json.dumps(payload),
+            headers=headers
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
 
 def strip_leading_bot_at(msg: str, bot_id: str) -> str:
     '''清除前导CQ/OP码的at'''

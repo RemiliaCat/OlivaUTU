@@ -4,7 +4,6 @@ from .config import DEFAULT_CUSTOM_CONFIG, DATA_FILE_NAME, CACHE_FILE_NAME
 from . import config
 from . import utils
 from . import data
-import requests
 import hashlib
 import random
 import uuid
@@ -38,6 +37,8 @@ class Event(object):
         global glogger
         glogger = utils.Logger()
         glogger.bind(Proc)
+        global gProc
+        gProc = Proc
         unity_load()
 
     def init_after(plugin_event:OlivOS_Event, Proc:OlivOS_Proc):
@@ -112,8 +113,7 @@ def unity_reply(plugin_event:OlivOS_Event, Proc:OlivOS_Proc) -> None:
                 handle_sbm_show(pevent=pevent, key_hash=key_hash)
         # 暂定显示所有key_hash及其对应keyword，可能改为近30个回复词
         elif sbm_cmd['action'] == 'list':
-            if  pevent.data.user_id in gconf['ADMINISTRATORS']:
-                handle_sbm_list(pevent=pevent)
+            handle_sbm_list(pevent=pevent)
         return
     
     rev_cmd = parse_rev_cmd(msg)
@@ -190,6 +190,7 @@ def plugin_reload() -> None:
     '''menu事件中的plugin_reload事件处理'''
     unity_load()
 
+# 命令处理
 def handle_sbm_add(pevent, sbm_uuid, author, keyword, reply, match_type) -> None:
     '''处理sbm命令中的add子命令'''
     img_data = utils.parse_OPcode_image(reply)
@@ -251,11 +252,43 @@ def handle_sbm_show(pevent, key_hash) -> None:
 def handle_sbm_list(pevent) -> None:
     '''处理sbm命令中的list子命令'''
     tmp_data_union = read_json(data_path(DATA_FILE_NAME))
-    tmp_res_raw = {}
-    for key_hash, unit in tmp_data_union.get('data').items():
-        tmp_res_raw[key_hash] = unit['keyword']
-    tmp_res = '\n'.join(f'{v}:\n{k}' for k, v in tmp_res_raw.items())
-    pevent.reply(tmp_res)
+    if tmp_data_union.get('data') is None:
+        return
+    
+    tmp_res_raw: list[tuple[int, str]] = [
+        (i+1, unit['keyword'])
+        for i, unit in enumerate(tmp_data_union.get('data').values())
+    ]
+
+    max_len = 10
+    total = len(tmp_res_raw)
+    if total <= max_len:
+        tmp_res = '\n'.join(f'<{i}> {k}' for i, k in tmp_res_raw)
+        pevent.reply(tmp_res)
+        return
+    
+    # 满`max_len`开新一页，余下不满`max_len`算作一页
+    messages_raw = []
+    messages = []
+    max_page = -(len(tmp_res_raw) // -max_len) # 向上取整
+    for page_this in range(1, max_page+1):
+        beg_pos = (page_this - 1) * max_len
+        end_pos = (page_this - 0) * max_len
+        page_data = tmp_res_raw[beg_pos:end_pos]
+
+        tmp_res = (
+            f'第[{page_this}/{max_page}]页\n' + 
+            '\n'.join(f'<{i}> {k}' for i, k in page_data)
+        )
+        messages_raw.append(tmp_res)
+        messages.append(utils.create_forward_node(pevent.bot_info.id, gconf['NICKNAME'], tmp_res))
+
+    server_config = utils.get_account_config(pevent, gProc)
+    if not utils.send_forward_message(pevent, messages, server_config):
+        for msg in messages_raw:
+            pevent.reply(msg)
+        
+
 
 def handle_rev_pass(pevent, sbm_uuid) -> None:
     '''处理审核系统中的pass命令'''
@@ -300,6 +333,7 @@ def handle_rev_reject(pevent, sbm_uuid) -> None:
     pevent.send(send_type='private', target_id=author, message=msg_rejected)
     pevent.reply(msg_rejected)
 
+# 命令解析
 def parse_sbm_cmd(msg: str) -> 'dict|None':
     '''
     解析: /submit add/del/show 命令
